@@ -40,11 +40,50 @@ namespace WpfApp1
 
         private static List<string> _pngNames = new List<string>() { "decals", "sponsors" }; 
 
-        private Encoder _encoder = Encoder.CPU;
-        private double _quality;
-        private string _liveryRoot;
-        private bool _ddsPrefix;
+        public static class Defaults
+        {
+            public static readonly Encoder Encoder = Encoder.GPU;
+            public static readonly double Quality = 0.1;
+            public static readonly string LiveryRoot = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                "Assetto Corsa Competizione",
+                "Customs",
+                "Liveries"
+            );
+            public static readonly bool DDSPrefix = false;
+            public static readonly string ComprExePath = System.IO.Path.Combine(
+                Directory.GetDirectories(System.IO.Path.GetPathRoot(Environment.SystemDirectory), "Compressonator_*")[0],
+                "bin",
+                "CLI",
+                "compressonatorcli.exe"
+            );
+            public static readonly bool DDSOverwrite = false;
+            /*
+            static Defaults()
+            {
+                Encoder = Encoder.GPU;
+                Quality = 0.1;
+                LiveryRoot = System.IO.Path.Combine(
+                   Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                   "Assetto Corsa Competizione",
+                   "Customs",
+                   "Liveries"
+               );
+               DDSPrefix = false;
+               ComprExePath = System.IO.Path.Combine(
+                   Directory.GetDirectories(System.IO.Path.GetPathRoot(Environment.SystemDirectory), "Compressonator_")[0],
+                   "compressonatorcli.exe"
+                );
+            }*/
+            
+        }
 
+        private Encoder _encoder = Defaults.Encoder;
+        private double _quality = Defaults.Quality;
+        private string _liveryRoot = Defaults.LiveryRoot;
+        private bool _ddsPrefix = Defaults.DDSPrefix;
+        private bool _ddsOverwrite = Defaults.DDSOverwrite;
+        private string _comprExePath = Defaults.ComprExePath;
         public MainWindow()
         {
             InitializeComponent();
@@ -73,11 +112,9 @@ namespace WpfApp1
         }
         private FileInfo? getComprExe()
         {
-            string comprDirPath = System.IO.Path.Combine(Directory.GetCurrentDirectory(), "compressonatorcli_windows");
-            if (Directory.Exists(comprDirPath))
+            if (File.Exists(_comprExePath))
             {
-                DirectoryInfo comprDir = new DirectoryInfo(comprDirPath);
-                return getFile(comprDir, "compressonatorcli.exe");
+                return new FileInfo(_comprExePath);
             }
             return null;
         }
@@ -133,7 +170,7 @@ namespace WpfApp1
                     string pngPath = System.IO.Path.Combine(customSkinDir.FullName, pngName + ".png");
                     if (!File.Exists(pngPath))
                     {
-                        string msg = (new StringBuilder(pngPath).Append("not found")).ToString();
+                        string msg = (new StringBuilder(pngPath).Append(" not found")).ToString();
                         Debug.WriteLine(msg);
                         Dispatcher.BeginInvoke(
                             new Action(() => { TextBoxStdOut.AppendText(msg + '\n'); })
@@ -160,6 +197,16 @@ namespace WpfApp1
                     for (int mip = 0; mip < 2; mip++)
                     {
                         string ddsPath = System.IO.Path.Combine(customSkinDir.FullName, (new StringBuilder(pngName).AppendFormat("_{0}.dds", mip)).ToString());
+                        if (File.Exists(ddsPath) && !_ddsOverwrite)
+                        {
+                            StringBuilder sb = new StringBuilder("").Append(ddsPath).Append(" exists. Skipping");
+                            string msg1 = sb.ToString();
+                            Debug.WriteLine(msg1);
+                            Dispatcher.BeginInvoke(
+                                new Action(() => { TextBoxStdOut.AppendText(msg1 + '\n'); })
+                            );
+                            continue;
+                        }
                         string sourcePNG = pngPath;
                         if (mip == 1)
                         {
@@ -209,14 +256,16 @@ namespace WpfApp1
         private void RadioEncoderGPU_Checked(object sender, RoutedEventArgs e)
         {
             _encoder = Encoder.GPU;
-            TextBoxStdOut.AppendText(String.Format("Encoder: {0}\n", EncoderStr[_encoder]));
+            if (TextBoxStdOut != null)
+                TextBoxStdOut.AppendText(String.Format("Encoder: {0}\n", EncoderStr[_encoder]));
 
         }
 
         private void RadioEncoderCPU_Checked(object sender, RoutedEventArgs e)
         {
             _encoder = Encoder.CPU;
-            TextBoxStdOut.AppendText(String.Format("Encoder: {0}\n", EncoderStr[_encoder]));
+            if (TextBoxStdOut != null)
+                TextBoxStdOut.AppendText(String.Format("Encoder: {0}\n", EncoderStr[_encoder]));
         }
 
         private void CheckDDSPrefix_Checked(object sender, RoutedEventArgs e)
@@ -283,21 +332,85 @@ namespace WpfApp1
 
         private void ButtonResetDefault_Click(object sender, RoutedEventArgs e)
         {
-            FileInfo comprExe = getComprExe();
-            if (comprExe == null)
+            _encoder = Defaults.Encoder;
+            RadioEncoderGPU.IsChecked = true;
+
+            _ddsPrefix = Defaults.DDSPrefix;
+            CheckDDSPrefix.IsChecked = _ddsPrefix;
+
+            _ddsOverwrite = Defaults.DDSOverwrite;
+            CheckDDSOverwrite.IsChecked = _ddsOverwrite;
+
+            _comprExePath = Defaults.ComprExePath;
+            TextBoxComprExe.Text = _comprExePath;
+            if (!File.Exists(_comprExePath))
             {
                 TextBoxStdOut.AppendText("Compressonator CLI not found\n");
             }
             else
             {
-                TextBoxStdOut.AppendText(String.Format("Compressonator CLI found:{0}\n", comprExe.FullName));
+                TextBoxStdOut.AppendText(String.Format("Compressonator CLI found:{0}\n", _comprExePath));
             }
+
+            _quality = Defaults.Quality;
+            SpinnerQuality.Value = _quality;
+
+            _liveryRoot = Defaults.LiveryRoot;
+            TextBoxLiveryRoot.Text = _liveryRoot;
+            if (!Directory.Exists(_liveryRoot))
+            {
+                TextBoxStdOut.AppendText("Livery folder not found\n");
+            }
+            else
+            {
+                TextBoxStdOut.AppendText(String.Format("Livery folder found:{0}\n", _liveryRoot));
+            }
+
         }
 
         private void TextBoxStdOut_TextChanged(object sender, TextChangedEventArgs e)
         {
             System.Windows.Controls.TextBox textBox = (System.Windows.Controls.TextBox)sender;
             textBox.ScrollToEnd();
+        }
+
+        private void ButtonBrowseComprExe_Click(object sender, RoutedEventArgs e)
+        {
+            string path = string.Empty;
+
+            if (CommonFileDialog.IsPlatformSupported)
+            {
+                using (CommonOpenFileDialog dialog = new CommonOpenFileDialog())
+                {
+                    dialog.IsFolderPicker = false;
+                    dialog.Multiselect = false;
+                    dialog.DefaultDirectory = Directory.GetCurrentDirectory();
+                    dialog.Filters.Add(new CommonFileDialogFilter("Compressonator CLI", "exe"));
+                    if (dialog.ShowDialog() == CommonFileDialogResult.Ok)
+                    {
+                        path = dialog.FileName;
+                    }
+                }
+            }
+            else
+            {
+                TextBoxComprExe.Text = "Platform not supported.";
+            }
+            if (path != String.Empty)
+            {
+                _comprExePath = path;
+                TextBoxComprExe.Text = _comprExePath;
+            }
+        }
+
+        private void CheckDDSOverwrite_Checked(object sender, RoutedEventArgs e)
+        {
+            _ddsOverwrite = true;
+        }
+
+        private void CheckDDSOverwrite_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _ddsOverwrite = false;
         }
     }
 }
